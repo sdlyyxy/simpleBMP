@@ -102,7 +102,9 @@ bool BMP::load(const char* filename)
         throw "File color table structure error!";
         return false;
     }
-    pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
+    // pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
+    pPixelData = pDib + bitMapFileHeader.bfOffBits - sizeof(BITMAPFILEHEADER);
+    
     return true;
 }
 int BMP::getNumberOfColors()
@@ -167,13 +169,14 @@ bool BMP::createEmptyBMP(int nWidth, int nHeight, int nColor)
     pBitMapInfoHeader->biYPelsPerMeter = 1024;
     pBitMapInfoHeader->biWidth = nWidth;
     pBitMapInfoHeader->biHeight = nHeight;
-    pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
+    // pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
+    pPixelData = pDib + bitMapFileHeader.bfOffBits - sizeof(BITMAPFILEHEADER);
     pRgbQuad = (RGBQUAD*)(pDib + sizeof(BITMAPINFOHEADER));
     switch (nColor) {
     case 1:
         setColor(pRgbQuad , 0, 0, 0);
         setColor(pRgbQuad+1, 0xff, 0xff, 0xff);
-        memset(pPixelData, 0xff, dataSize);
+        memset(pPixelData, 0, dataSize);
         break;
     case 4:
     case 8:
@@ -204,6 +207,8 @@ void BMP::setColor(RGBQUAD* rgb, BYTE r, BYTE g, BYTE b)
 }
 bool BMP::save(const char* filename)
 {
+    bitMapFileHeader;
+    *pBitMapInfoHeader;
     if (!pDib) {
         return false;
     }
@@ -237,11 +242,20 @@ void BMP::circle()
     int radius = x > y ? y - 2 : x - 2;
     if (radius <= 2)
         return;
+    // for (int i = 0; i < 20; i++) {
+    //     for (int j = 0; j < 20; j++) {
+            // int dist = (i - x) * (i - x) + (j - y) * (j - y);
+            // if (dist > (radius - 1) * (radius - 1) && dist < (radius + 1) * (radius + 1)) {
+                // setPixelColor(j, i);
+                // list.push_back(std::pair<int, int>{ i, j });
+            // }
+        // }
+    // }
     for (int i = 0; i < biWidth; i++) {
         for (int j = 0; j < biHeight; j++) {
             int dist = (i - x) * (i - x) + (j - y) * (j - y);
             if (dist > (radius - 1) * (radius - 1) && dist < (radius + 1) * (radius + 1)) {
-                setPixelColor(i, j);
+                setPixelColor(j, i);
                 list.push_back(std::pair<int, int>{ i, j });
             }
         }
