@@ -9,7 +9,10 @@
 #include <fstream>
 #include<vector>
 #include <ios>
-
+#include<iostream>
+#include<bitset>
+#include<cmath>
+using namespace std;
 std::vector<std::pair<int, int>> list;
 
 // typedef unsigned short WORD;
@@ -56,22 +59,62 @@ public:
     bool save(const char* filename);
     bool createEmptyBMP(int width, int height, int colorBit);
     void circle();
+    bool toGray24();
+    void hReverse();
+    void vReverse();
+    void toGray8();
+    void smooth4();
+    void smooth8();
+    void bw();
+    void setLight(double alpha);
+    void setContrast(double alpha);
+    void to256();
 
 private:
     void setPixelColor(int i, int j);
     int getNumberOfColors();
     void setColor(RGBQUAD* rgb, BYTE r, BYTE g, BYTE b);
+    void updateBytePerLine();
+    void updateBiSizeImage();
+    void updateColorTableSize();
+    void updateBfOffbits();
+    void updateBfSize();
     int colorTableSize;
     int numberOfColors;
     BITMAPFILEHEADER bitMapFileHeader;
-    BITMAPINFOHEADER* pBitMapInfoHeader;
+    BITMAPINFOHEADER* pBitMapInfoHeader;//todo:remove this pointer
+    BITMAPINFOHEADER bitMapInfoHeader;
     RGBQUAD* pRgbQuad;
     BYTE* pPixelData;
     BYTE* pDib;
+    int bytePerLine;
 };
 
+
+void BMP::updateBfOffbits(){
+    bitMapFileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)
+     + colorTableSize ;
+}
+void BMP::updateBfSize(){
+    bitMapFileHeader.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)
+        + colorTableSize + bitMapInfoHeader.biSizeImage;
+}
+
+void BMP::updateBytePerLine(){
+    bytePerLine = (bitMapInfoHeader.biWidth * bitMapInfoHeader.biBitCount 
+        + 31) / 32 * 4;
+}
+void BMP::updateBiSizeImage(){
+    bitMapInfoHeader.biSizeImage = bitMapInfoHeader.biHeight * bytePerLine;
+}
+void BMP::updateColorTableSize(){
+    colorTableSize = sizeof(RGBQUAD) * bitMapInfoHeader.biClrUsed;
+}
 bool BMP::load(const char* filename)
 {
+    if(pDib){
+        delete[] pDib;
+    }
     std::ifstream ifs(filename, std::ios::binary);
     ifs.seekg(0, std::ios::end);
     int fileSize = ifs.tellg();
@@ -92,9 +135,10 @@ bool BMP::load(const char* filename)
     }
     ifs.read((char*)pDib, fileSize - sizeof(BITMAPFILEHEADER));
     pBitMapInfoHeader = (BITMAPINFOHEADER*)pDib;
+    memcpy(&bitMapInfoHeader, pBitMapInfoHeader, sizeof(BITMAPINFOHEADER));
     pRgbQuad = (RGBQUAD*)(pDib + sizeof(BITMAPINFOHEADER));
     colorTableSize = bitMapFileHeader.bfOffBits - sizeof(BITMAPFILEHEADER)
-        - pBitMapInfoHeader->biSize;
+        - bitMapInfoHeader.biSize;
     numberOfColors = getNumberOfColors();
     if (numberOfColors * sizeof(RGBQUAD) != colorTableSize) {
         delete[] pDib;
@@ -102,17 +146,23 @@ bool BMP::load(const char* filename)
         throw "File color table structure error!";
         return false;
     }
+    // std::cout << fileSize << std ::endl;
+    // std::cout << sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) +
+        // bitMapInfoHeader.biSizeImage<< std:: endl;
     // pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
     pPixelData = pDib + bitMapFileHeader.bfOffBits - sizeof(BITMAPFILEHEADER);
-    
+    int bytePerLine = (bitMapInfoHeader.biWidth * bitMapInfoHeader.biBitCount 
+        + 31) / 32 * 4;
+    this->bytePerLine = bytePerLine;
+    // std::cout << this->bytePerLine << std::endl;
     return true;
 }
 int BMP::getNumberOfColors()
 {
-    if (pBitMapInfoHeader->biClrUsed) {
-        return pBitMapInfoHeader->biClrUsed;
+    if (bitMapInfoHeader.biClrUsed) {
+        return bitMapInfoHeader.biClrUsed;
     } else {
-        switch (pBitMapInfoHeader->biBitCount) {
+        switch (bitMapInfoHeader.biBitCount) {
         case 1:
             return 2;
         case 4:
@@ -146,6 +196,7 @@ bool BMP::createEmptyBMP(int nWidth, int nHeight, int nColor)
     }
     numberOfColors = colorTableSize / sizeof(RGBQUAD);
     int bytePerLine = (nWidth * nColor + 31) / 32 * 4;
+    this->bytePerLine = bytePerLine;
     int dataSize = bytePerLine * nHeight;
     bitMapFileHeader.bfType = 0x4d42;
     bitMapFileHeader.bfReserved1 = 0;
@@ -158,17 +209,17 @@ bool BMP::createEmptyBMP(int nWidth, int nHeight, int nColor)
         return false;
     }
     pBitMapInfoHeader = (BITMAPINFOHEADER*)pDib;
-    pBitMapInfoHeader->biSize = sizeof(BITMAPINFOHEADER);
-    pBitMapInfoHeader->biBitCount = nColor;
-    pBitMapInfoHeader->biClrImportant = 1;
-    pBitMapInfoHeader->biClrUsed = numberOfColors;
-    pBitMapInfoHeader->biCompression = 0;
-    pBitMapInfoHeader->biPlanes = 1;
-    pBitMapInfoHeader->biSizeImage = dataSize;
-    pBitMapInfoHeader->biXPelsPerMeter = 1024;
-    pBitMapInfoHeader->biYPelsPerMeter = 1024;
-    pBitMapInfoHeader->biWidth = nWidth;
-    pBitMapInfoHeader->biHeight = nHeight;
+    bitMapInfoHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bitMapInfoHeader.biBitCount = nColor;
+    bitMapInfoHeader.biClrImportant = 1;
+    bitMapInfoHeader.biClrUsed = numberOfColors;
+    bitMapInfoHeader.biCompression = 0;
+    bitMapInfoHeader.biPlanes = 1;
+    bitMapInfoHeader.biSizeImage = dataSize;
+    bitMapInfoHeader.biXPelsPerMeter = 1024;
+    bitMapInfoHeader.biYPelsPerMeter = 1024;
+    bitMapInfoHeader.biWidth = nWidth;
+    bitMapInfoHeader.biHeight = nHeight;
     // pPixelData = pDib + sizeof(BITMAPINFOHEADER) + colorTableSize;
     pPixelData = pDib + bitMapFileHeader.bfOffBits - sizeof(BITMAPFILEHEADER);
     pRgbQuad = (RGBQUAD*)(pDib + sizeof(BITMAPINFOHEADER));
@@ -207,8 +258,8 @@ void BMP::setColor(RGBQUAD* rgb, BYTE r, BYTE g, BYTE b)
 }
 bool BMP::save(const char* filename)
 {
-    bitMapFileHeader;
-    *pBitMapInfoHeader;
+    // bitMapFileHeader;
+    // *pBitMapInfoHeader;
     if (!pDib) {
         return false;
     }
@@ -226,7 +277,13 @@ bool BMP::save(const char* filename)
     // ofs.write((char*)&bitMapFileHeader, sizeof(BITMAPFILEHEADER));
     fwrite((char*)&bitMapFileHeader, 1, sizeof(BITMAPFILEHEADER), pfile);
     // ofs.write((char*)pDib, bitMapFileHeader.bfSize - sizeof(BITMAPFILEHEADER));
-    fwrite((char*)pDib, 1, bitMapFileHeader.bfSize - sizeof(BITMAPFILEHEADER), pfile);
+    // fwrite((char*)pDib, 1, bitMapFileHeader.bfSize - sizeof(BITMAPFILEHEADER), pfile);
+    // std::cout << colorTableSize << std::endl;
+    // std::cout << this->bitMapInfoHeader.biSizeImage << std :: endl;
+    fwrite((char*)&bitMapInfoHeader, 1, sizeof(BITMAPINFOHEADER), pfile);
+    fwrite((char*)pRgbQuad, 1, colorTableSize,pfile);
+    // fwrite((char*)(pDib+sizeof(BITMAPINFOHEADER)), 1,this->bitMapInfoHeader.biSizeImage, pfile);
+    fwrite((char*)pPixelData, 1,this->bitMapInfoHeader.biSizeImage, pfile);
     fclose(pfile);
     // puts("eheh");
     // ofs.close();
@@ -235,8 +292,8 @@ bool BMP::save(const char* filename)
 }
 void BMP::circle()
 {
-    const int& biWidth = pBitMapInfoHeader->biWidth;
-    const int& biHeight = pBitMapInfoHeader->biHeight;
+    const int& biWidth = bitMapInfoHeader.biWidth;
+    const int& biHeight = bitMapInfoHeader.biHeight;
     int x = biWidth / 2;
     int y = biHeight / 2;
     int radius = x > y ? y - 2 : x - 2;
@@ -256,16 +313,16 @@ void BMP::circle()
             int dist = (i - x) * (i - x) + (j - y) * (j - y);
             if (dist > (radius - 1) * (radius - 1) && dist < (radius + 1) * (radius + 1)) {
                 setPixelColor(j, i);
-                list.push_back(std::pair<int, int>{ i, j });
+                // list.push_back(std::pair<int, int>{ i, j });
             }
         }
     }
 }
 void BMP::setPixelColor(int i, int j)
 {
-    const int& biWidth = pBitMapInfoHeader->biWidth;
-    const int& biHeight = pBitMapInfoHeader->biHeight;
-    const int& biBitCount = pBitMapInfoHeader->biBitCount;
+    const int& biWidth = bitMapInfoHeader.biWidth;
+    const int& biHeight = bitMapInfoHeader.biHeight;
+    const int& biBitCount = bitMapInfoHeader.biBitCount;
     int bytePerLine = (biWidth * biBitCount + 31) / 32 * 4;
     switch (biBitCount) {
     case 1:
@@ -293,5 +350,239 @@ BMP::~BMP()
         delete[] pDib;
     pDib = nullptr;
 }
+bool BMP::toGray24(){
+    // std::cout << pBitMapInfoHeader->biBitCount << std::endl;
+    if (bitMapInfoHeader.biBitCount != 24) {
+        return false;
+    }
+    // std::cout << this->bytePerLine << std::endl;
+    BYTE (*p)[this->bytePerLine] = (BYTE (*)[this->bytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++){
+        for (int j = 0; j < this->bytePerLine ;j+=3){
+            // int tmp = 0 * p[i][j] + 0* p[i][j + 1] + 1 * p[i][j + 2];
+            int tmp = 0.59 * p[i][j] + 0.11 * p[i][j + 1] + 0.3 * p[i][j + 2];
+            p[i][j] = p[i][j + 1] = p[i][j + 2] = tmp;
+            // p[i][j] = 200;
+            // p[i][j + 1] = p[i][j + 2] = 0;
+        }
+    }
+    return true;
+}
+void BMP::toGray8(){
+    // toGray24();
+    bitMapInfoHeader.biBitCount = 8;
+    int oldBytePerLine = bytePerLine;
+    updateBytePerLine();
+    updateBiSizeImage();
+    bitMapInfoHeader.biClrUsed = 256;
+    updateColorTableSize();
+    updateBfOffbits();
+    updateBfSize();
+    pRgbQuad = new RGBQUAD[256];
+    for (int i = 0; i < 256; i++) {
+        setColor(pRgbQuad+i, i, i, i);
+    }
+    BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work_new)[bytePerLine] = (BYTE(*)[bytePerLine])newdata;
+    BYTE (*work_old)[oldBytePerLine] = (BYTE (*)[oldBytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++) {
+        for (int j = 0; j < bitMapInfoHeader.biWidth;j++){
+            work_new[i][j] = work_old[i][j * 3];
+            // work_new[i][j] = 100;
+        }
+    }
+    pPixelData = newdata;
+}
+void BMP::bw(){
+    bitMapInfoHeader.biBitCount = 1;
+    int oldBytePerLine = bytePerLine;
+    updateBytePerLine();
+    updateBiSizeImage();
+    bitMapInfoHeader.biClrUsed = 2;
+    updateColorTableSize();
+    updateBfOffbits();
+    updateBfSize();
+    pRgbQuad = new RGBQUAD[2];
+    for (int i = 0; i < 2; i++) {
+        setColor(pRgbQuad+i, i*255, i*255, i*255);
+    }
+    int threshold = 180;
+    BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work_new)[bytePerLine] = (BYTE(*)[bytePerLine])newdata;
+    BYTE (*work_old)[oldBytePerLine] = (BYTE (*)[oldBytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++) {
+        for (int j = 0; j < bytePerLine;j++){
+            std::bitset<8> bs;
+            for (int k = 0; k < 8;k++){
+                if(k+j*8<bitMapInfoHeader.biWidth){
+                    if(work_old[i][k+j*8]>threshold){
+                        bs[k] = 1;
+                    }
+                }
+            }
+            work_new[i][j] = bs.to_ulong();
+            // work_new[i][j] = 100;
+        }
+    }
+    pPixelData = newdata;
+}
+void BMP::hReverse(){
+    BYTE (*work)[bytePerLine] = (BYTE(*)[bytePerLine])pPixelData;
+    int width = bitMapInfoHeader.biWidth;
+    for (int i = 0; i < bitMapInfoHeader.biHeight; i++) {
+        for (int j = 0; j <width/2;j++){
+            swap(work[i][j], work[i][width - 1 - j]);
+        }
+    }
+}
+void BMP::vReverse(){
+    BYTE (*work)[bytePerLine] = (BYTE(*)[bytePerLine])pPixelData;
+    int width = bitMapInfoHeader.biWidth;
+    int height=bitMapInfoHeader.biHeight;
+    for (int i = 0; i < height/2; i++) {
+        for (int j = 0; j <width;j++){
+            swap(work[i][j], work[height-i-1][j]);
+        }
+    }
+}
+void BMP::smooth4(){
+    BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work_old)[bytePerLine] = (BYTE (*)[bytePerLine])pPixelData;
+    BYTE (*work)[bytePerLine] = (BYTE(*)[bytePerLine])newdata;
+    int width = bitMapInfoHeader.biWidth;
+    int height=bitMapInfoHeader.biHeight;
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j <width;j++){
+            int n = 0,res=0;
+            const int dx[] = {0, 0, 0, -1, 1 };
+            const int dy[] = {0, 1, -1, 0, 0 };
+            for (int k = 0; k < 5;k++){
+                int x = i + dx[k];
+                int y = j + dy[k];
+                if((x>=0)&&(y>=0)&&(x<height)&&(y<width)){
+                    n++;
+                    res += work_old[x][y];
+                }
+            }
+            work[i][j] = res / n;
+        }
+    }
+    delete[] pPixelData;
+    pPixelData = newdata;
+}
+void BMP::smooth8(){
+    BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work_old)[bytePerLine] = (BYTE (*)[bytePerLine])pPixelData;
+    BYTE (*work)[bytePerLine] = (BYTE(*)[bytePerLine])newdata;
+    int width = bitMapInfoHeader.biWidth;
+    int height=bitMapInfoHeader.biHeight;
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j <width;j++){
+            int n = 0,res=0;
+            const int dx[] = {0, 0, 0, -1, 1 ,1,1,-1,-1};
+            const int dy[] = {0, 1, -1, 0, 0, 1,-1,1,-1};
+            for (int k = 0; k < 9;k++){
+                int x = i + dx[k];
+                int y = j + dy[k];
+                if((x>=0)&&(y>=0)&&(x<height)&&(y<width)){
+                    n++;
+                    res += work_old[x][y];
+                }
+            }
+            work[i][j] = res / n;
+        }
+    }
+    delete[] pPixelData;
+    pPixelData = newdata;
+}
+void BMP::setLight(double alpha){
+    if(alpha<0||alpha>1)
+        alpha = 0;
+    // BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work)[bytePerLine] = (BYTE(*)[bytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++) {
+        for (int j = 0; j < bytePerLine/2;j+=3){
+            BYTE &R=work[i][j+2];
+            R = pow(R, alpha) * pow(255, 1 - alpha);
+            BYTE &G=work[i][j + 1];
+            G = pow(G, alpha) * pow(255, 1 - alpha);
+            BYTE& B = work[i][j ];
+            B = pow(B, alpha) * pow(255, 1 - alpha);
+        }
+    }
+}
+void BMP::setContrast(double alpha){
+    if(alpha<-1||alpha>1)
+        alpha = 0;
+    // BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    int mid = 128;
+    BYTE(*work)[bytePerLine] = (BYTE(*)[bytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++) {
+        for (int j = 0; j < bytePerLine/2;j+=3){
+            int R=work[i][j+2];
+            R=mid+(R-mid)*(1+alpha);
+            if(R<0)
+                R = 0;
+            if(R>255)
+                R = 255;
+            work[i][j + 2] = R;
+            int G = work[i][j + 1];
+            G=mid+(G-mid)*(1+alpha);
+            if(G<0)
+                G = 0;
+            if(G>255)
+                G = 255;
+            work[i][j + 1] = G;
+            int B = work[i][j];
+            B=mid+(B-mid)*(1+alpha);
+            if(B<0)
+                B = 0;
+            if(B>255)
+                B = 255;
+            work[i][j] = B;
+        }
+    }
+}
+void BMP::to256(){
+    bitMapInfoHeader.biBitCount = 8;
+    int oldBytePerLine = bytePerLine;
+    updateBytePerLine();
+    updateBiSizeImage();
+    bitMapInfoHeader.biClrUsed = 256;
+    updateColorTableSize();
+    updateBfOffbits();
+    updateBfSize();
+    pRgbQuad = new RGBQUAD[256];
+    for (int i = 0; i < 256; i++) {
+        setColor(pRgbQuad+i, ((i&0b11)<<6)&0b11111111, (((i>>2)&0b111)<<5)&0b11111111, 
+        (i>>5<<5)&0b11111111);
+        //setColor is r.g.b....
+    }
+    BYTE* newdata = new BYTE[bitMapInfoHeader.biSizeImage];
+    // cout << bitMapInfoHeader.biSizeImage << endl;
+    BYTE (*work_new)[bytePerLine] = (BYTE(*)[bytePerLine])newdata;
+    BYTE (*work_old)[oldBytePerLine] = (BYTE (*)[oldBytePerLine])pPixelData;
+    for (int i = 0; i < bitMapInfoHeader.biHeight;i++) {
+        for (int j = 0; j < bitMapInfoHeader.biWidth;j++){
+            work_new[i][j] = (work_old[i][j * 3] >> 5 << 5) & 0b11111111;
+            work_new[i][j] += (((work_old[i][j * 3 + 1] >> 2) & 0b111) << 2) & 0b11111111;
+            work_new[i][j] +=work_old[i][j * 3 + 2] & 0b11;
+            // work_new[i][j] = (work_old[i][j * 3] >> 5 << 5) & 0b11111111;
+            // work_new[i][j] = (((work_old[i][j*3+1]>>2)&0b111)<<2)&0b11111111;
+            // work_new[i][j] = work_old[i][j*3+2]&0b11;
+            printf("%d ", work_new[i][j]);
 
+            // work_new[i][j] = 100;
+            // work_new[i][j] = i ;
+        }
+    }
+    pPixelData = newdata;
+
+}
 #endif
